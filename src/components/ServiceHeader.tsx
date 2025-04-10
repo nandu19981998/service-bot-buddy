@@ -1,26 +1,11 @@
 
 import React, { useState } from 'react';
-import { MessageSquareIcon, InfoIcon, DatabaseIcon, FileIcon, AlertCircleIcon } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import { processWordDocument, saveKnowledgeEntriesToFile } from '@/utils/wordToJson';
-import { parseImportedData, loadExternalKnowledgeBase, getKnowledgeBaseStats } from './KnowledgeBase';
-import { toast } from '@/hooks/use-toast';
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
+import { MessageSquareIcon, InfoIcon } from 'lucide-react';
+import { getKnowledgeBaseStats } from './KnowledgeBase';
+import { handleWordFileProcessing } from '@/utils/knowledgeBaseUtils';
+import KnowledgeMenu from './knowledge/KnowledgeMenu';
+import PreviewDialog from './knowledge/PreviewDialog';
+import KnowledgeStatusBadge from './knowledge/KnowledgeStatusBadge';
 
 interface ServiceHeaderProps {
   resetChat: () => void;
@@ -37,82 +22,10 @@ const ServiceHeader: React.FC<ServiceHeaderProps> = ({ resetChat, onKnowledgeBas
     const file = e.target.files?.[0];
     if (!file) return;
     
-    // Only accept .docx files
-    if (!file.name.endsWith('.docx')) {
-      toast({
-        title: "Invalid file type",
-        description: "Please upload a Word (.docx) document.",
-        variant: "destructive"
-      });
-      return;
-    }
+    await handleWordFileProcessing(file, setIsProcessing, setProcessedEntries, setShowDialog);
     
-    try {
-      setIsProcessing(true);
-      toast({
-        title: "Processing document",
-        description: "Please wait while we process your Word document...",
-      });
-      
-      // Process the Word document
-      const entries = await processWordDocument(file);
-      
-      if (entries.length > 0) {
-        setProcessedEntries(entries);
-        setShowDialog(true);
-        toast({
-          title: "Document processed successfully",
-          description: `Found ${entries.length} potential knowledge entries.`,
-        });
-      } else {
-        toast({
-          title: "No entries found",
-          description: "Couldn't extract any question-answer pairs from the document.",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error("Error processing Word document:", error);
-      toast({
-        title: "Processing failed",
-        description: "Failed to process the Word document. Please check the format.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsProcessing(false);
-      // Reset the file input
-      e.target.value = '';
-    }
-  };
-  
-  const handleImportToKnowledgeBase = () => {
-    if (processedEntries.length > 0) {
-      // Load the entries into the knowledge base
-      const entriesAdded = loadExternalKnowledgeBase(processedEntries);
-      setShowDialog(false);
-      
-      // Update stats
-      const newStats = getKnowledgeBaseStats();
-      setStats(newStats);
-      
-      // Notify parent component
-      onKnowledgeBaseUpdate();
-      
-      toast({
-        title: "Knowledge base updated",
-        description: `Added ${entriesAdded} entries to the knowledge base.`,
-      });
-      
-      // Reset the processed entries
-      setProcessedEntries([]);
-    }
-  };
-  
-  const handleDownloadJson = () => {
-    if (processedEntries.length > 0) {
-      saveKnowledgeEntriesToFile(processedEntries);
-      setShowDialog(false);
-    }
+    // Reset the file input
+    e.target.value = '';
   };
 
   return (
@@ -124,34 +37,14 @@ const ServiceHeader: React.FC<ServiceHeaderProps> = ({ resetChat, onKnowledgeBas
         </div>
         <div className="flex items-center space-x-3">
           <div className="flex items-center">
-            <Badge variant={stats.imported > 0 ? "success" : "outline"} className="mr-3">
-              <DatabaseIcon className="w-3 h-3 mr-1" />
-              {stats.imported > 0 
-                ? `${stats.imported} Entries Imported` 
-                : "No Custom Knowledge"}
-            </Badge>
+            <KnowledgeStatusBadge importedCount={stats.imported} />
           </div>
         
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center text-sm text-muted-foreground hover:text-primary transition-colors">
-                <DatabaseIcon className="w-4 h-4 mr-1" />
-                Knowledge Base
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => document.getElementById('knowledge-file')?.click()}>
-                Import JSON Knowledge
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => document.getElementById('word-file')?.click()} disabled={isProcessing}>
-                Convert Word Document {isProcessing && '(Processing...)'}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => alert("Export functionality would be implemented here")}>
-                Export Current Knowledge
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <KnowledgeMenu 
+            isProcessing={isProcessing}
+            onWordFileClick={() => document.getElementById('word-file')?.click()}
+            onKnowledgeFileClick={() => document.getElementById('knowledge-file')?.click()}
+          />
           
           <button 
             onClick={resetChat}
@@ -173,51 +66,13 @@ const ServiceHeader: React.FC<ServiceHeaderProps> = ({ resetChat, onKnowledgeBas
       />
       
       {/* Dialog for previewing and confirming Word document processing */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Document Processed</DialogTitle>
-            <DialogDescription>
-              Successfully extracted {processedEntries.length} entries from your Word document.
-              Would you like to add these to your knowledge base or download as JSON?
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="max-h-[300px] overflow-y-auto border rounded p-3 my-3">
-            {processedEntries.slice(0, 5).map((entry, index) => (
-              <div key={index} className="mb-3 pb-3 border-b last:border-0">
-                <p className="font-medium text-sm">{entry.question}</p>
-                <p className="text-xs text-muted-foreground mt-1">{entry.answer.substring(0, 100)}...</p>
-              </div>
-            ))}
-            {processedEntries.length > 5 && (
-              <p className="text-sm text-muted-foreground italic">
-                + {processedEntries.length - 5} more entries
-              </p>
-            )}
-          </div>
-          
-          <DialogFooter className="sm:justify-start">
-            <div className="flex space-x-2 w-full justify-between">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleDownloadJson}
-              >
-                <FileIcon className="mr-2 h-4 w-4" />
-                Download JSON
-              </Button>
-              <Button
-                type="button"
-                onClick={handleImportToKnowledgeBase}
-              >
-                <DatabaseIcon className="mr-2 h-4 w-4" />
-                Import to Knowledge Base
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PreviewDialog
+        showDialog={showDialog}
+        setShowDialog={setShowDialog}
+        processedEntries={processedEntries}
+        setProcessedEntries={setProcessedEntries}
+        onKnowledgeBaseUpdate={onKnowledgeBaseUpdate}
+      />
     </>
   );
 };
