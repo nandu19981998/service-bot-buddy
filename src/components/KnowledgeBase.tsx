@@ -1,4 +1,3 @@
-
 interface KnowledgeEntry {
   id: string;
   question: string;
@@ -8,7 +7,7 @@ interface KnowledgeEntry {
 }
 
 // This is a sample knowledge base that can be expanded with imported data
-const knowledgeBase: KnowledgeEntry[] = [
+let knowledgeBase: KnowledgeEntry[] = [
   {
     id: "intro-1",
     question: "What is this service manual for?",
@@ -46,10 +45,35 @@ const knowledgeBase: KnowledgeEntry[] = [
   }
 ];
 
-// This function would typically be expanded to load data from an external source
-export const loadExternalKnowledgeBase = (data: KnowledgeEntry[]): KnowledgeEntry[] => {
-  // In a real application, you might merge with existing data or perform validation
-  return [...knowledgeBase, ...data];
+// Keep track of imported entries count
+let importedEntriesCount = 0;
+
+// This function loads data from an external source
+export const loadExternalKnowledgeBase = (data: KnowledgeEntry[]): number => {
+  if (!data || data.length === 0) return 0;
+  
+  // Add unique IDs to any entries that don't have them
+  const processedData = data.map((entry, index) => ({
+    ...entry,
+    id: entry.id || `imported-${Date.now()}-${index}`
+  }));
+  
+  // Merge with existing knowledge base
+  knowledgeBase = [...knowledgeBase, ...processedData];
+  
+  // Update imported count
+  importedEntriesCount += processedData.length;
+  
+  return processedData.length;
+};
+
+// Get the total count of knowledge base entries
+export const getKnowledgeBaseStats = () => {
+  return {
+    total: knowledgeBase.length,
+    imported: importedEntriesCount,
+    default: knowledgeBase.length - importedEntriesCount
+  };
 };
 
 // Enhanced search function with more robust matching

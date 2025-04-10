@@ -76,7 +76,7 @@ const extractKnowledgeEntries = (doc: Document): KnowledgeEntry[] => {
     if (isQuestion && !collectingAnswer) {
       // If we've collected a Q&A pair, add it to entries
       if (currentQuestion && currentAnswer) {
-        const id = `imported-${entries.length + 1}`;
+        const id = `imported-${entries.length + 1}-${Date.now()}`;
         // Extract keywords from question (simplistic approach)
         const keywords = extractKeywords(currentQuestion);
         
@@ -113,7 +113,7 @@ const extractKnowledgeEntries = (doc: Document): KnowledgeEntry[] => {
   
   // Add the last Q&A pair if it exists
   if (currentQuestion && currentAnswer) {
-    const id = `imported-${entries.length + 1}`;
+    const id = `imported-${entries.length + 1}-${Date.now()}`;
     const keywords = extractKeywords(currentQuestion);
     
     entries.push({

@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { processWordDocument, saveKnowledgeEntriesToFile } from '@/utils/wordToJson';
-import { parseImportedData, loadExternalKnowledgeBase } from './KnowledgeBase';
+import { parseImportedData, loadExternalKnowledgeBase, getKnowledgeBaseStats } from './KnowledgeBase';
 import { toast } from '@/hooks/use-toast';
 import { Button } from "@/components/ui/button";
 import {
@@ -20,15 +20,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 interface ServiceHeaderProps {
   resetChat: () => void;
+  onKnowledgeBaseUpdate: () => void;
 }
 
-const ServiceHeader: React.FC<ServiceHeaderProps> = ({ resetChat }) => {
+const ServiceHeader: React.FC<ServiceHeaderProps> = ({ resetChat, onKnowledgeBaseUpdate }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [processedEntries, setProcessedEntries] = useState<any[]>([]);
+  const [stats, setStats] = useState(() => getKnowledgeBaseStats());
   
   const handleWordFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,12 +88,19 @@ const ServiceHeader: React.FC<ServiceHeaderProps> = ({ resetChat }) => {
   const handleImportToKnowledgeBase = () => {
     if (processedEntries.length > 0) {
       // Load the entries into the knowledge base
-      loadExternalKnowledgeBase(processedEntries);
+      const entriesAdded = loadExternalKnowledgeBase(processedEntries);
       setShowDialog(false);
+      
+      // Update stats
+      const newStats = getKnowledgeBaseStats();
+      setStats(newStats);
+      
+      // Notify parent component
+      onKnowledgeBaseUpdate();
       
       toast({
         title: "Knowledge base updated",
-        description: `Added ${processedEntries.length} entries to the knowledge base.`,
+        description: `Added ${entriesAdded} entries to the knowledge base.`,
       });
       
       // Reset the processed entries
@@ -113,6 +123,15 @@ const ServiceHeader: React.FC<ServiceHeaderProps> = ({ resetChat }) => {
           <h1 className="text-xl font-semibold">Service Bot Buddy</h1>
         </div>
         <div className="flex items-center space-x-3">
+          <div className="flex items-center">
+            <Badge variant={stats.imported > 0 ? "success" : "outline"} className="mr-3">
+              <DatabaseIcon className="w-3 h-3 mr-1" />
+              {stats.imported > 0 
+                ? `${stats.imported} Entries Imported` 
+                : "No Custom Knowledge"}
+            </Badge>
+          </div>
+        
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center text-sm text-muted-foreground hover:text-primary transition-colors">
@@ -125,7 +144,7 @@ const ServiceHeader: React.FC<ServiceHeaderProps> = ({ resetChat }) => {
                 Import JSON Knowledge
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => document.getElementById('word-file')?.click()} disabled={isProcessing}>
-                Convert Word Document
+                Convert Word Document {isProcessing && '(Processing...)'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => alert("Export functionality would be implemented here")}>
@@ -145,17 +164,6 @@ const ServiceHeader: React.FC<ServiceHeaderProps> = ({ resetChat }) => {
       </div>
       
       {/* Hidden file inputs */}
-      <input
-        type="file"
-        id="knowledge-file"
-        accept=".json,.txt"
-        className="hidden"
-        onChange={(e) => {
-          // This is handled by the existing code in ChatBot.tsx
-          const event = new Event('change', { bubbles: true });
-          document.getElementById('knowledge-file')?.dispatchEvent(event);
-        }}
-      />
       <input
         type="file"
         id="word-file"
