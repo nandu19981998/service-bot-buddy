@@ -2,10 +2,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SendIcon } from 'lucide-react';
+import { SendIcon, UploadIcon } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import ServiceHeader from './ServiceHeader';
-import { searchKnowledgeBase, getDefaultResponse } from './KnowledgeBase';
+import { searchKnowledgeBase, getDefaultResponse, parseImportedData, loadExternalKnowledgeBase } from './KnowledgeBase';
+import { toast } from '@/hooks/use-toast';
 
 interface Message {
   text: string;
@@ -22,6 +23,7 @@ const ChatBot: React.FC = () => {
   const [inputValue, setInputValue] = useState<string>('');
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     scrollToBottom();
@@ -66,6 +68,62 @@ const ChatBot: React.FC = () => {
     ]);
   };
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Only allow text or JSON files for simplicity
+    if (file.type !== 'application/json' && !file.type.startsWith('text/')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JSON file containing your knowledge base data.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const result = e.target?.result as string;
+        const parsedData = parseImportedData(result);
+        
+        if (parsedData.length > 0) {
+          loadExternalKnowledgeBase(parsedData);
+          toast({
+            title: "Knowledge base updated",
+            description: `Added ${parsedData.length} entries to the knowledge base.`,
+            variant: "default"
+          });
+          setMessages(prev => [...prev, { 
+            text: `I've learned ${parsedData.length} new topics! Ask me about them.`, 
+            isBot: true 
+          }]);
+        } else {
+          toast({
+            title: "No data found",
+            description: "The file didn't contain any valid knowledge base entries.",
+            variant: "destructive"
+          });
+        }
+      } catch (error) {
+        console.error("Error processing file:", error);
+        toast({
+          title: "Error processing file",
+          description: "Please check that your file is properly formatted.",
+          variant: "destructive"
+        });
+      }
+    };
+    
+    reader.readAsText(file);
+    
+    // Reset the file input so the same file can be uploaded again if needed
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="flex flex-col w-full h-full border rounded-lg shadow-lg overflow-hidden bg-white">
       <ServiceHeader resetChat={resetChat} />
@@ -85,6 +143,23 @@ const ChatBot: React.FC = () => {
       </div>
       
       <div className="p-3 border-t">
+        <div className="flex items-center mb-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept=".json,.txt"
+            className="hidden"
+            id="knowledge-file"
+          />
+          <label 
+            htmlFor="knowledge-file" 
+            className="flex items-center text-sm text-primary cursor-pointer hover:text-primary/80 transition-colors"
+          >
+            <UploadIcon className="h-4 w-4 mr-1" />
+            Import Knowledge Base
+          </label>
+        </div>
         <form 
           onSubmit={(e) => {
             e.preventDefault();
